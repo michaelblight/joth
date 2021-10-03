@@ -40,9 +40,9 @@ Then this is transformed using the following Javascript code:
 ```
 You can alternatively use `transformUrlTo` and pass an HTML DOM element or string id as the second parameter. This will replace it's contents with the transformation.
 
-<details><summary><span style="font-size:24px">joth XML</span></summary>
+<details><summary><h1>joth XML</h1></summary>
 
-<details><summary><span style="font-size:18px">Operations</span></summary>
+<details><summary><h2>Operations</h2></summary>
 
 ### j:call
 
@@ -118,7 +118,7 @@ Anything unrecognised is ignored, including children of that node. Therefore you
 
 </details>
 
-<details><summary><span style="font-size:18px">Parentheses</span></summary>
+<details><summary><h2>Parentheses</h2></summary>
 
 Attributes containing the `{}` parentheses are interpreted as Javascript, which will have access to four properties: root; context; args; and vars.
 
@@ -148,5 +148,15 @@ Since the parentheses contain Javascript, you can include code. For example:
 Keep in mind that everything is a string - even non-existent attributes parse as an empty string. This allows you to include code such
 as `{context.doesntExist.childProperty}` without having to worry that "doesntExist" might be undefined.
 </details>
+
+</details>
+
+<details><summary><h1>To Do</h1></summary>
+
+1. `j:else` is currently not built.
+2. `j:text` and `j:value-of` probably don't currently include child text.
+3. `j:foreach` probably needs to exist.
+4. No browser has been tested other than Chrome.
+5. No automated test cases yet.
 
 </details>
