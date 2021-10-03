@@ -1,0 +1,27 @@
+{
+    "name": "joth",
+    "version": "1.1.1",
+    "description": "Javascript Object To HTML",
+    "main": "joth.js",
+    "scripts": {
+      "test": "echo \"No test specified\""
+    },
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/michaelblight/joth.git"
+    },
+    "keywords": [
+      "javascript",
+      "stylesheet",
+      "transformation",
+      "xslt"
+    ],
+    "author": "Michael Blight",
+    "license": "Apache-2.0",
+    "bugs": {
+      "url": "https://github.com/michaelblight/joth/issues"
+    },
+    "homepage": "https://github.com/michaelblight/joth#readme",
+    "dependencies": {
+    }
+  }
