@@ -43,6 +43,7 @@ You can alternatively use `transformUrlTo` and pass an HTML DOM element or strin
 <details><summary><h1>joth Class</h1></summary>
 
 <details><summary><h2>Properties</h2></summary>
+
 ### Options
 
 This is an object containing the properties below. An example is:
@@ -61,10 +62,19 @@ debugging.
 
 Returns a Promise to load joth XML from the specified URL.
 
+### loadString(s)
+
+Loads joth XML from the specified string. Normally only useful for testing.
+
 ### toString(e, nsPrefix)
 
 Converts the XML node, e, to a string. If e is null, it converts the whole joth XML. If e is not null, it also attempts to
 remove the namespace that would otherwise be added if `nsPrefix` is supplied.
+
+### transformJSON(json)
+
+Perform the transformation using the supplied object and previously loaded joth XML.
+The result is returned as a DIV element.
 
 ### transformUrl(url)
 
@@ -92,8 +102,8 @@ These are all "private" methods and don't do anything useful outside the appropr
 In the descriptions below:
 - "attr" refers to an attribute value that can optionally contain parentheses to evaluate. Examples are `"static"`,
 `"{context.myProperty}"` and `"test-{vars.number}"`.
-- "eval" refers to an attribute value that is implicitly evaluated - as if the whole attribute was surrounded in
-parentheses. This is to provide greater similarity to XSLT.
+- "eval" refers to an attribute value that is also evaluated as a whole. If it doesn't contain parentheses, and doesn't start with
+"context.", "args.", "vars.", it will be prefixed with "context." automatically. This is to provide greater similarity to XSLT.
 - square brackets [] indicate that an attribute is optional.
 
 ### j:call name="attr" [select="eval"] [ argName="attr" ...]
