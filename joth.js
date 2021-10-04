@@ -6,24 +6,34 @@ function jothException(source, message, detail) {
 }
 jothException.prototype = Object.create(Error.prototype);
 
-function jothState(context, args, vars) {
+function _jothState(context, args, vars) {
 	this.context = context;
-	this.args = args;
-	this.vars = vars;
+	this.args = {};
+	this.vars = {};
+	_copyKeyValues(args, this.args);
+	_copyKeyValues(vars, this.vars);
 }
 
-function jothEval(s) {
-	return new Function('root', 'context', 'args', 'vars', 
-		'"use strict";try { return (' + s + ') } catch(e) { return "" }');
+function _copyKeyValues(from, to) {
+	var keys = Object.keys(from);
+	for (var i=0; i<keys.length; i++) {
+		var key = keys[i];
+		to[key] = from[key];
+	}
+}
+
+function _jothEval(s) {
+	var func = '"use strict";try { return (' + s + ') } catch(e) { return undefined; }';
+	return new Function('root', 'context', 'args', 'vars', func);
 }
 
 class joth {
 	
 	constructor() {
-		this.logLevel = 0;
 		this.namespace = 'http://blight.co/Transform';
 		this.xt = null;
 		this.main = null;
+		this.options = { includeComment: false, debug: 0 }
 	}
 
 	xt = null;
@@ -34,6 +44,7 @@ class joth {
 	
 	load(url) {
 		var that = this;
+		if (that.options.debug > 0) console.log({ source: 'load', url: url })
 		return new Promise((resolve, reject) => {
 			that._loadXml(url)
 				.then((xml) => {
@@ -50,24 +61,41 @@ class joth {
 		});
 	}
 	
+	loadString(s) {
+		var that = this;
+		if (that.options.debug > 0) console.log({ source: 'loadString', s: s });
+		that.xt = that._loadXmlString(s);
+	}
+	
 	transformUrl(url) {
 		var that = this;
+		if (that.options.debug > 0) console.log({ source: 'transformUrl', url: url })
 		return new Promise((resolve, reject) => {
 			fetch(url)
 				.then((result) => result.json())
 				.then((json) => {
+					if (that.options.debug > 0) console.log({ source: 'transformUrl', json: json })
 					that.root = json;
 					var e = that._transform(json);
 					resolve(e);
 				})
 				.catch((e) => { 
+					if (that.options.debug > 0) console.log({ source: 'transformUrl', exception: e })
 					reject(e);
 				});
 		});
 	}
 	
+	transformJSON(json) {
+		var that = this;
+		if (that.options.debug > 0) console.log({ source: 'transformJSON', json: json })
+		that.root = json;
+		return that._transform(json);
+	}
+	
 	transformUrlTo(url, dest) {
 		var that = this;
+		if (that.options.debug > 0) console.log({ source: 'transformUrlTo', url: url })
 		return new Promise((resolve, reject) => {
             that.transformUrl(url)
                 .then((e) => {
@@ -85,11 +113,12 @@ class joth {
 		});
 	}
 
-	toString(e = null) {
+	toString(e = null, nsPrefix = null) {
 		var ser = new XMLSerializer();
 		if (e) {
 			var s = ser.serializeToString(e);
-			return s.replace(' xmlns:j="'+this.namespace+'"', ''); // Bit dodgy, but remove namespace
+			if (nsPrefix)
+				return s.replace(' xmlns:'+nsPrefix+'="'+this.namespace+'"', ''); // Bit dodgy, but remove namespace
 		} else {
 			return ser.serializeToString(this.xt);
 		}
@@ -102,6 +131,10 @@ class joth {
 		return (i < 0) ? s : s.substring(0, i+1);
 	}
 
+	_loadXmlString(s) {
+		return new DOMParser().parseFromString(s, "text/html.xml");
+	}
+
 	_loadXml(url) {
 		var that = this;
 		return new Promise((resolve, reject) => {
@@ -109,7 +142,7 @@ class joth {
 			xhr.onreadystatechange = function() {
 				if (this.readyState == 4) {
 					if (this.status == 200) {
-						if (that.debug >= 5) console.log({ 'source': '_loadXml', xml: this.responseXML, text: this.responseText });
+						if (that.options.debug >= 5) console.log({ 'source': '_loadXml', xml: this.responseXML, text: this.responseText });
 						if (this.responseXML) {
 							resolve(this.responseXML);
 						} else {
@@ -141,9 +174,9 @@ class joth {
 					promises.push(that._loadInclude(e, url));
 				}
 			}
-			if (that.debug > 0) console.log({ source: '_loadIncludes', message: 'Loading '+promises.length+' includes' });
+			if (that.options.debug > 0) console.log({ source: '_loadIncludes', message: 'Loading '+promises.length+' includes' });
 			Promise.all(promises).then(() => {
-				if (that.debug > 0) console.log({ source: '_loadIncludes', message: 'Loaded', text: that.toString() });
+				if (that.options.debug > 0) console.log({ source: '_loadIncludes', message: 'Loaded', text: that.toString() });
 				resolve();
 			});
 		});
@@ -154,7 +187,7 @@ class joth {
 		return new Promise((resolve, reject) => {
 			that._loadXml(url)
 				.then((xml) => {
-					if (that.debug > 0) console.log({ source: '_loadInclude', message: "Loaded from '"+url+"'", text: that.toString(xml.documentElement) });
+					if (that.options.debug > 0) console.log({ source: '_loadInclude', message: "Loaded from '"+url+"'", text: that.toString(xml.documentElement) });
 					var parent = e.parentNode;
 					var doc = xml.documentElement;
 					while (doc.firstChild) parent.insertBefore(doc.firstChild, e);
@@ -189,9 +222,9 @@ class joth {
 				}
 				that._parseAttrs(child);
 			});
-			if (that.debug >= 5) console.log({ 'source': '_parse', xt: that.xt, text: that.toString() });
+			if (that.options.debug >= 5) console.log({ 'source': '_parse', xt: that.xt, text: that.toString() });
 			var keys = Object.keys(that.functions);
-			if (that.debug > 0) console.log({ source: '_parse', message: 'Parsed '+that.subAttrs.length+' tags with {} and '+keys.length+' functions', functions: keys });
+			if (that.options.debug > 0) console.log({ source: '_parse', message: 'Parsed '+that.subAttrs.length+' tags with {} and '+keys.length+' functions', functions: keys });
 			if (that.main == null) {
 				throw new jothException('joth._parse', 'Main node missing', that._toNodeString(e));
 			}
@@ -231,22 +264,18 @@ class joth {
 	
 	_transform(json) {
 		var that = this;
-		that.state = new jothState(json, {}, {});
+		that.state = new _jothState(json, {}, {});
         var result = document.createElement('div');
-		if (that.debug > 0) console.log({ 'source': '_transform', json: json });
+		if (that.options.debug >= 5) console.log({ 'source': '_transform', json: json });
 		that.main.childNodes.forEach((e) => {
-			console.log("Transforming "+that.toString(e));
 			that._transformNode(e, that.state, result, 0);
 		});
         return result;
 	}
 
 	_transformNode(e, state, parent, depth) {
-		if ((parent == null) || (parent == 'null')) {
-			console.log("Parent is null");
-			console.log(e);
-		}
 		var that = this;
+		if (parent == null) throw new jothException('joth._transformNode', "Did not expect parent to be null", e); 
 		var dom = parent;
 		if (e.nodeType == 1) {
 			if (e.namespaceURI == that.namespace) {
@@ -254,7 +283,7 @@ class joth {
 			} else {
 				dom = document.createElement(e.tagName);
 				that._copyAttrs(e, dom, state);
-				if (that.debug >= 10) console.log({ 'source': '_transformNode', node: that.toString(dom) });
+				if (that.options.debug >= 10) console.log({ 'source': '_transformNode', node: that.toString(dom) });
 				parent.appendChild(dom);
 				that._transformChildren(e, state, dom, depth);
 			}
@@ -277,13 +306,15 @@ class joth {
 	_transformJoth(e, state, parent, depth) {
 		var that = this;
 		var dom = parent;
+		if (that.options.includeComment) that._includeComment('Start: ', e, state, parent, depth)
 		if (e.localName == 'call') {
 			dom = that._transform_call(e, state, parent, depth);
 		} else if (e.localName == 'call-foreach') {
 			dom = that._transform_call_foreach(e, state, parent, depth);
 		} else if (e.localName == 'case') {
 			dom = that._transform_case(e, state, parent, depth);
-			console.log("Finished case");
+		} else if (e.localName == 'if') {
+			dom = that._transform_if(e, state, parent, depth);
 		} else if (e.localName == 'text') {
 			dom = that._transform_text(e, state, parent, depth);
 		} else if (e.localName == 'value-of') {
@@ -296,38 +327,60 @@ class joth {
 		if (dom == null) {
 			console.log("why is dom null "+that.toString(e));
 		}
+		if (that.options.includeComment) that._includeComment('End: ', e, state, parent, depth)
 		return dom;
+	}
+
+	_includeComment(prefix, e, state, parent, depth) {
+		var that = this;
+		var parts = [];
+		parts.push(prefix+' '+e.tagName);
+		for (var i=0; i<e.attributes.length; i++) {
+			var a = e.attributes[i];
+			var je = (a.value.indexOf('{') >= 0) ? '="'+that._attrEval(a.value, state)+'"' : '';
+			parts.push(a.name+'="'+a.value+'"'+je);
+		}
+		var nl = document.createTextNode('\n');
+		parent.appendChild(nl);
+		var comment = document.createComment(parts.join(' '));
+		parent.appendChild(comment);
+		parent.appendChild(nl);
 	}
 	
 	_transform_call(e, state, parent, depth) {
 		var that = this;
-		var name = that._attrValue(e, 'name', state);
+		var name = that._attrValue(e, 'name', state, false);
+		if (!name) throw new jothException('joth._transform_call', "Name attribute missing", e);
 		var func = that.functions[name];
-		if (!func) throw new jothException('joth._transformJoth', "Could not find function '"+name+"'");
-		console.log("Call "+name);
-		var newstate = new jothState(state.context, that._getArgs(e), state.vars);
-		var comment = document.createComment('call '+name);
-		parent.appendChild(comment);
-		func.childNodes.forEach((child) => {
-			that._transformNode(child, newstate, parent, depth+1);
-		});
+		if (!func) throw new jothException('joth._transform_call', "Could not find function '"+name+"'", e);
+		var newstate = that._stateForAttr(e, "select", state);
+		if (newstate.context) {
+			func.childNodes.forEach((child) => {
+				that._transformNode(child, newstate, parent, depth+1);
+			});
+		}
 		return parent;
 	}
 	
 	_transform_call_foreach(e, state, parent, depth) {
 		var that = this;
 		var name = that._attrValue(e, 'name', state);
+		if (!name) throw new jothException('joth._transform_call_foreach', "Name attribute missing", e);
 		var func = that.functions[name];
-		if (!func) throw new jothException('joth._transformJoth', "Could not find function '"+name+"'");
-		var comment = document.createComment('call-foreach '+name);
-		parent.appendChild(comment);
-		var args = that._getArgs(e);
-		for (var i=0; i<e.childNodes.length-1; i++) {
-			var child = e.childNodes[i];
-			var newstate = new jothState(child, args, state.vars);
-			func.childNodes.forEach((child) => {
-				that._transformNode(child, newstate, parent, depth+1);
-			});
+		if (!func) throw new jothException('joth._transform_call_foreach', "Could not find function '"+name+"'");
+		var tempstate = that._stateForAttr(e, "select", state);
+		if ((tempstate.context) && Array.isArray(tempstate.context)) {
+			var args = that._getArgs(e);
+			args.info = { position: 0, isFirst: false, isLast: false }
+			var len = tempstate.context.length;
+			for (var i=0; i<len; i++) {
+				var item = tempstate.context[i];
+				args.info = { position: i+1, isFirst: (i==0), isLast: (i==len-1) }
+				var newstate = new _jothState(item, args, state.vars);
+				func.childNodes.forEach((child) => {
+					that._transformNode(child, newstate, parent, depth+1);
+				});
+			}
 		}
 		return parent;
 	}
@@ -338,34 +391,69 @@ class joth {
 		for (var i=0; i<whens.length; i++) {
 			var when = whens[i];
 			if (when.localName !== 'when') continue;
-			var test = that._attrValue(when, 'test', state);
+			var test = that._attrValue(when, 'test', state, true);
 			if (that._isTrue(test, state)) {
+				if (that.options.includeComment) that._includeComment('When start: ', when, state, parent, depth);
 				that._transformChildren(when, state, parent, depth);
+				if (that.options.includeComment) that._includeComment('When end: ', when, state, parent, depth);
 				break;
 			}
 		}
 		return parent;
 	}
 	
-	_transform_text(e, state, parent) {
+	_transform_if(e, state, parent, depth) {
 		var that = this;
-		var value = that._attrValue(e, 'select', state); 
-		var dom = document.createTextNode(value);
-		parent.appendChild(dom);
+		var test = that._attrValue(e, 'test', state, true);
+		var result = that._isTrue(test, state);
+		if (that.options.debug > 0) console.log({ source: '_transform_if', test: test, result: result });
+		if (result) {
+			that._transformChildren(e, state, parent, depth);
+		}
 		return parent;
 	}
 	
-	_transform_variables(e, state, parent) {
+	_transform_text(e, state, parent, depth) {
+		var that = this;
+		console.log('text');
+		console.log(state);
+		var result = that._attrValue(e, 'value', state, false); 
+		if (result) {
+			console.log('result="'+result+'"');
+			var dom = document.createTextNode(result);
+			parent.appendChild(dom);
+		}
+		that._transformChildren(e, state, parent, depth);
+		return parent;
+	}
+	
+	_transform_value_of(e, state, parent, depth) {
+		var that = this;
+		var hasParens = that._attrHasParens(e, "select");
+		var value = that._attrValue(e, 'select', state, true);
+		var je = _jothEval(value);
+		var result = je(that.root, state.context, state.args, state.vars);
+		if (result) {
+			var dom = document.createTextNode(result);
+			parent.appendChild(dom);
+		}
+		that._transformChildren(e, state, parent, depth);
+		return parent;
+	}
+	
+	_transform_variable(e, state, parent, depth) {
+		var that = this;
+		var name = that._attrValue(e, 'name', state, false); 
+		var value = that._attrValue(e, 'select', state, true); 
+		var je = _jothEval(value);
+		var result = je(that.root, state.context, state.args, state.vars);
+		state.vars[name] = result;
+		return parent;
+	}
+	
+	_transform_variables(e, state, parent, depth) {
 		var that = this;
 		state.vars = {...state.vars, ...that._getArgs(e)}
-		return parent;
-	}
-	
-	_transform_value_of(e, state, parent) {
-		var that = this;
-		var value = that._attrValue(e, 'select', state); 
-		var dom = document.createTextNode(value);
-		parent.appendChild(dom);
 		return parent;
 	}
 	
@@ -378,45 +466,85 @@ class joth {
 		return args;
 	}
 	
-	_attrValue(e, name, state, defValue = null) {
+	_attrExists(e, name) {
+		return (e.attributes[name]) ? true : false;
+	}
+	
+	_attrHasParens(e, name) {
+		var a = e.attributes[name];
+		if (!a || !a.value) return false;
+		return (a.value.indexOf('{') >= 0);
+	}
+	
+	_attrValue(e, name, state, shouldPrefix = false) {
 		var that = this;
-		var value = (e.attributes[name]) ? e.attributes[name].value : defValue;
-		if (value && value.indexOf('{') >= 0) value = that._attrEval(value, state);
-		return value;
+		var value = (e.attributes[name]) ? e.attributes[name].value : null;
+		var before = value;
+		var result = value;
+		if (value && value.indexOf('{') >= 0) {
+			result = that._attrEval(value, state);
+			console.log('Parens "'+value+'" now "'+result+'"');
+		} else if (value && shouldPrefix && !result.startsWith('context.') && !result.startsWith('args.') && !result.startsWith('vars.')) {
+			result = 'context.' + result;
+		}
+		console.log("Result for "+name+' before '+before+' after "'+result+'"');
+		return result;
 	}
 	
 	_attrEval(value, state) {
 		var that = this;
-		var parts = [];
 		var repl = value;
-		//var je = joshEval('context', 'args', 'vars', 's', '"use strict";return (' + s + ')')();
 		while (true) {
+			if ((typeof repl) !== 'string') break;
 			var i = repl.indexOf('{');
 			if (i < 0) break;
 			var j = repl.indexOf('}');
 			if (j < 0) break;
-			var left = (i < 0) ? '' : repl.substring(0, i);
-			var right = (j < 0) ? '' : repl.substring(j+1);
+			if (j < i) break;
+			var left = repl.substring(0, i);
+			var right = repl.substring(j+1);
 			var mid = repl.substring(i+1, j);
 			try {
-				var je = jothEval(mid);
-				var subst = je(that.root, state.context, state.args, state.vars);
-				repl = left + (subst ? subst : '') + right;
+				console.log("eval "+mid);
+				var je = _jothEval(mid);
+				var result = je(that.root, state.context, state.args, state.vars);
+				if (result == undefined) result = null;
+				console.log("eval result "+isNaN(result)+' "'+result+'"');
+				if (result && !isNaN(result) && (result.toString().indexOf(' ') < 0)) { // Don't treat extra spaces as a number
+					result = parseFloat(result);
+				}
+				if ((left == '') && (right == '')) {
+					repl = result;
+				} else {
+					repl = left + (result == null ? '' : result) + right;
+				}
 			} catch(e) {
 				console.log("Exception: "+e);
 				repl = left + right;
 			}
 		}
-		console.log(value+'->'+repl);
 		return repl;
+		//return (repl == undefined) ? '' : repl;
+	}
+
+	_stateForAttr(e, name, state) {
+		var that = this;
+		var newcontext = state.context;
+		if (that._attrExists(e, name)) {
+			var value = that._attrValue(e, name, state, true);
+			value = that._attrEval(value, state);
+			var je = _jothEval(value);
+			newcontext = je(that.root, state.context, state.args, state.vars);
+		}
+		return new _jothState(newcontext, {...state.args, ...that._getArgs(e)}, state.vars);
 	}
 	
 	_isTrue(test, state) {
-		var context = state.context;
-		var args = state.args;
-		var result = eval(test);
-		var ret = (result) ? true : false;
-		return (result) ? true : false;
+		var that = this;
+		var je = _jothEval(test);
+		var result = je(that.root, state.context, state.args, state.vars);
+		if (result == null) result = false;
+		return result;
 	}
 	
 	_copyAttrs(from, to, state) {
@@ -424,7 +552,8 @@ class joth {
 		if (from.attributes) {
 			for (var i=0; i<from.attributes.length; i++) {
 				var name = from.attributes[i].name;
-				to.setAttribute(name, that._attrValue(from, name, state));
+				var value = that._attr(from, name, state);
+				if (value !== null) to.setAttribute(name, value);
 			}
 		}
 	}

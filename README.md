@@ -40,17 +40,69 @@ Then this is transformed using the following Javascript code:
 ```
 You can alternatively use `transformUrlTo` and pass an HTML DOM element or string id as the second parameter. This will replace it's contents with the transformation.
 
+<details><summary><h1>joth Class</h1></summary>
+
+<details><summary><h2>Properties</h2></summary>
+### Options
+
+This is an object containing the properties below. An example is:
+```
+    j.options = { includeComments: true }
+```
+- `includeComments` will generate HTML comments for the start and end in the transformed output for all `j:` nodes. To help with
+debugging.
+- `debug` to write logs to the console if it is greater than 0. A value of 5 writes important details, 10 writes the most detail.
+
+</details>
+
+<details><summary><h2>Methods</h2></summary>
+
+### load(url)
+
+Returns a Promise to load joth XML from the specified URL.
+
+### toString(e, nsPrefix)
+
+Converts the XML node, e, to a string. If e is null, it converts the whole joth XML. If e is not null, it also attempts to
+remove the namespace that would otherwise be added if `nsPrefix` is supplied.
+
+### transformUrl(url)
+
+Returns a Promise to load JSON from the specified URL and perform the transformation using the previously loaded joth XML.
+The result is returned as a DIV element in the resolve for the Promise.
+
+### transformUrlTo(url, dest)
+
+Returns a Promise to call `transformUrl(url)` and then clear the contents of `dest` and load the children of the returned DIV as
+children under `dest`. If `dest` is a string, it is assumed to be the id of a document element. Otherwise it is assumed to be the
+document element.
+
+### _whatever()
+
+These are all "private" methods and don't do anything useful outside the appropriate context.
+
+</details>
+
+</details>
+
 <details><summary><h1>joth XML</h1></summary>
 
 <details><summary><h2>Operations</h2></summary>
 
-### j:call
+In the descriptions below:
+- "attr" refers to an attribute value that can optionally contain parentheses to evaluate. Examples are `"static"`,
+`"{context.myProperty}"` and `"test-{vars.number}"`.
+- "eval" refers to an attribute value that is implicitly evaluated - as if the whole attribute was surrounded in
+parentheses. This is to provide greater similarity to XSLT.
+- square brackets [] indicate that an attribute is optional.
+
+### j:call name="attr" [select="eval"] [ argName="attr" ...]
 
 Calls the named `j:function`. The current context will be passed, unless the call has a "select" attribute. All of the attributes
 on the node will also be passed as "args". This also means you can't have your own arguments to a function being called "name" or
 "select".
 
-### j:call-foreach
+### j:call-foreach name="attr" [select="eval"] [ argName="attr" ...]
 
 This is the same as a `j:call` within a `j:foreach`. The context (current or "select" if available) must be an array, in which case the called function gets passed each element of the array, one at a time. If the context is not an array, or has no elements, the `j:else` 
 branch will be followed if it exists.
@@ -64,7 +116,7 @@ true, the `j:else` branch will be followed if it exists.
 
 This is an else clause for `j:call-foreach`, `j:case`, and `j:if`.
 
-### j:function
+### j:function name="functionName"
 
 Used for defining functions that are called using `j:call` or `j:call-foreach`. For example:
 ```
@@ -72,12 +124,12 @@ Used for defining functions that are called using `j:call` or `j:call-foreach`. 
 ```
 All attributes on the call are considered to be arguments to the function, and are accessed within the funciton using "vars".
 
-### j:if
+### j:if test="eval"
 
 Evaluates the "test" attribute, and if true, follows the content (excluding the optional `j:else`). If false, the `j:else` branch will
 be followed if it exists.
 
-### j:include
+### j:include href="url"
 
 Used for including other joth xml files. These nodes must be a child of the `j:stylesheet` node. For example:
 ```
@@ -94,23 +146,39 @@ will be used.
 This must be the root node of the document, and must have a namespace of "http://blight.co/Transform". 
 The only children that will have any relevance are `j:main`, `j:include`, and `j:function`. Everything else will be ignored.
 
-### j:text
+### j:text value="attr"
 
-Includes the content and optional "select" attribute as text. If both are present, the "select" attribute comes first. This is the
-same behavior as `j:value-of`.
+Includes the content and optional "value" attribute as text. If both are present, the "value" attribute comes first. The
+following two operations would be equivalent:
+```
+    <j:text value="{context.myProperty}" />
+    <j:value-of select="myProperty" />
+```
 
-### j:value-of
+### j:value-of select="eval"
 
-This is identical to `j:text`.
+Includes the content and optional "select" attribute as text. If both are present, the "value" attribute comes first.
+If the "select" does not contain parentheses, it is automatically prefixed with "context.". If it does contain parentheses,
+the content is first expanded, and then evaluated. For example, given a context of `{ a: 1, b: 2, field1: "John", field2: "Mary" }`:
+```
+    <j:value-of select="context.field{context.a}" />    - Produces "John"
+    <j:text value="{a}+{b}" />                          - Produces "1+2"
+    <j:value-of select="{a}+{b}" />                     - Produces "3"
+```
 
-### j:variables
+### j:variable name="variableName" [ select="eval" ]
+
+Sets one global variable based on the select attribute on the node as well as the content of the node. Also see `j:variables`.
+
+### j:variables [variableName="attr" ...]
 
 Sets global variables based on the attributes on the node. Variables are accessed with "vars".
 For example, assuming the context is `{ name: "Michael" }`:
 ```
     <j:variables country="Australia" message="Hello {name}" />
 ```
-This variables would then be accessed using `{vars.country}` and `{vars.message}`.
+These variables would then be accessed using `{vars.country}` and `{vars.message}`. The `j:variables` operation ignores any node content, whereas `j:variable` includes content. Use `j:variable` instead of `j:variables` when
+you need more complex logic (eg. content including `j:if`).
 
 ### j:anythingelse
 

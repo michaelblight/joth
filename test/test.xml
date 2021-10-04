@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<j:stylesheet xmlns:j="http://blight.co/Transform">
+
+	<j:main>
+<!-- Test 1-->
+        <j:call name="DoTest1.1" select="test1" />
+        <j:if test="test1"><j:call name="DoTest1.2" /></j:if>
+        <j:call name="DoTest1.3" select="test1" test="2" />
+<!-- Test 2-->
+        <j:call-foreach name="DoTest2.1" select="test2.p1" header="2.1 " />
+	</j:main>
+
+<!-- Test 1-->
+
+	<j:function name="DoTest1.1">
+		<j:value-of select="p1" />
+	</j:function>
+
+	<j:function name="DoTest1.2">
+		<j:value-of select="test1.p2" />
+	</j:function>
+
+	<j:function name="DoTest1.3">
+		<j:text value="{context.p3}"> a </j:text><!-- non-empty content should be preserved with spaces -->
+		<j:value-of select="context.field{context.a}" />
+		<j:text value=" ">             </j:text><!-- empty content should be ignored -->
+		<j:text value="{context.a}+{context.b}=" />
+		<j:value-of select="{context.a}+{context.b}" />
+		<j:text value=" " />
+		<j:text value="{context.c}" />
+		<j:value-of select="c" />
+	</j:function>
+
+<!-- Test 2-->
+
+	<j:function name="DoTest2.1">
+		<j:if test="args.info.isFirst"><j:text value="{args.header}" /></j:if>
+		<j:value-of select="p1a" />
+		<j:if test="args.info.isLast">.</j:if>
+	</j:function>
+
+</j:stylesheet>
