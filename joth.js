@@ -415,11 +415,8 @@ class joth {
 	
 	_transform_text(e, state, parent, depth) {
 		var that = this;
-		console.log('text');
-		console.log(state);
 		var result = that._attrValue(e, 'value', state, false); 
 		if (result) {
-			console.log('result="'+result+'"');
 			var dom = document.createTextNode(result);
 			parent.appendChild(dom);
 		}
@@ -483,11 +480,9 @@ class joth {
 		var result = value;
 		if (value && value.indexOf('{') >= 0) {
 			result = that._attrEval(value, state);
-			console.log('Parens "'+value+'" now "'+result+'"');
 		} else if (value && shouldPrefix && !result.startsWith('context.') && !result.startsWith('args.') && !result.startsWith('vars.')) {
 			result = 'context.' + result;
 		}
-		console.log("Result for "+name+' before '+before+' after "'+result+'"');
 		return result;
 	}
 	
@@ -505,11 +500,9 @@ class joth {
 			var right = repl.substring(j+1);
 			var mid = repl.substring(i+1, j);
 			try {
-				console.log("eval "+mid);
 				var je = _jothEval(mid);
 				var result = je(that.root, state.context, state.args, state.vars);
 				if (result == undefined) result = null;
-				console.log("eval result "+isNaN(result)+' "'+result+'"');
 				if (result && !isNaN(result) && (result.toString().indexOf(' ') < 0)) { // Don't treat extra spaces as a number
 					result = parseFloat(result);
 				}
