@@ -2,34 +2,40 @@
 <j:stylesheet xmlns:j="http://blight.co/Transform">
 
 	<j:main>
-<!-- Test 1-->
-        <j:call name="DoTest1.1" select="test1" />
-        <j:if test="test1"><j:call name="DoTest1.2" /></j:if>
-        <j:call name="DoTest1.3" select="test1" test="2" />
-<!-- Test 2-->
-        <j:call-foreach name="DoTest2.1" select="test2.p1" header="2.1 " />
-        <j:call-foreach name="DoTest2.2" select="test2.p2" />
-<!-- Test 3-->
-        <j:if test="test3">
-            <j:call name="DoTest3.1" />
-            <j:call name="DoTest3.2" />
-            <j:call name="DoTest3.3" />
+
+<!-- Test B1-->
+        <j:call name="DoTestB1.1" select="testB1" />
+        <j:if test="testB1"><j:call name="DoTestB1.2" /></j:if>
+        <j:call name="DoTestB1.3" select="testB1" test="2" />
+<!-- Test B2-->
+        <j:call-foreach name="DoTestB2.1" select="testB2.p1" header="B2.1 " />
+        <j:call-foreach name="DoTestB2.2" select="testB2.p2" />
+        <j:call name="DoTestB2.3" select="testB2" />
+<!-- Test B3-->
+        <j:if test="testB3">
+            <j:call name="DoTestB3.1" />
+            <j:call name="DoTestB3.2" />
+            <j:call name="DoTestB3.3" />
         </j:if>
-<!-- Test 4-->
-        <j:call name="DoTest4.1" select="test4" a1="1a" a2="2a" />
+<!-- Test B4-->
+        <j:call name="DoTestB4.1" select="testB4" a1="1a" a2="2a" />
+
+<!-- Test C1-->
+        <j:call name="DoTestC1.1" select="testC1" />
+
 	</j:main>
 
-<!-- Test 1: j:text and j:value-of -->
+<!-- Test B1: j:text and j:value-of -->
 
-	<j:function name="DoTest1.1">
+	<j:function name="DoTestB1.1">
 		<j:value-of select="p1" />
 	</j:function>
 
-	<j:function name="DoTest1.2">
-		<j:value-of select="test1.p2" />
+	<j:function name="DoTestB1.2">
+		<j:value-of select="testB1.p2" />
 	</j:function>
 
-	<j:function name="DoTest1.3">
+	<j:function name="DoTestB1.3">
 		<j:text value="{context.p3}"> a </j:text><!-- non-empty content should be preserved with spaces -->
 		<j:value-of select="context.field{context.a}" />
 		<j:text value=" ">             </j:text><!-- empty content should be ignored -->
@@ -40,59 +46,80 @@
 		<j:value-of select="c" />
 	</j:function>
 
-<!-- Test 2: j:call-foreach -->
+<!-- Test B2: j:call and j:call-foreach -->
 
-	<j:function name="DoTest2.1">
+	<j:function name="DoTestB2.1">
 		<j:if test="args.$info.isFirst"><j:text value="{args.header}" /></j:if>
 		<j:value-of select="p1a" />
 		<j:if test="args.$info.isLast">. </j:if>
 	</j:function>
 
-	<j:function name="DoTest2.2">
-		<j:if test="args.$info.position==1">2.2 </j:if>
+	<j:function name="DoTestB2.2">
+		<j:if test="args.$info.position==1">B2.2 </j:if>
 		<j:text value="{context}" /><!-- We're doing a call-foreach on an array of numbers, so context is just a number -->
 		<j:if test="args.$info.isLast"><j:text value=" " /></j:if>
 	</j:function>
 
-<!-- Test 3: j:else -->
+	<j:function name="DoTestB2.3">
+		<j:variables num="2.3b" />
+		<j:text value="B2.3 a" />
+		<j:call name="DoTestB{vars.num}" />
+	</j:function>
 
-	<j:function name="DoTest3.1">
-        <j:call-foreach name="DoTest3.1error" select="test3.p1" >
-            <j:else><j:text value="3.1 " /></j:else>
+	<j:function name="DoTestB2.3b">
+		<j:text value="b " />
+	</j:function>
+
+<!-- Test B3: j:else -->
+
+	<j:function name="DoTestB3.1">
+        <j:call-foreach name="DoTestB3.1error" select="test3.p1" >
+            <j:else><j:text value="B3.1 " /></j:else>
         </j:call-foreach>
 	</j:function>
 
-	<j:function name="DoTest3.1error">
-		<j:text value="DoTest3.1 Error " />
+	<j:function name="DoTestB3.1error">
+		<j:text value="DoTest3.1 Error " /><!-- Should not be called because the select has no children -->
 	</j:function>
 
-	<j:function name="DoTest3.2">
+	<j:function name="DoTestB3.2">
         <j:if test="DoesntExist">
-            <j:text value="3.2 Error " />
-            <j:else> <j:text value="3.2 " /></j:else>
+            <j:text value="B3.2 Error " />
+            <j:else> <j:text value="B3.2 " /></j:else>
         </j:if>
 	</j:function>
 
-	<j:function name="DoTest3.3">
+	<j:function name="DoTestB3.3">
         <j:choose>
             <j:when test="DoesntExist1"><j:text value="3.3 Error 1 " /></j:when>
             <j:when test="DoesntExist2"> <j:text value="3.3 Error 2 " /></j:when>
-            <j:otherwise><j:text value="3.3 " /></j:otherwise>
+            <j:otherwise><j:text value="B3.3 " /></j:otherwise>
         </j:choose>
 	</j:function>
 
-<!-- Test 4:vars -->
+<!-- Test B4: vars -->
 
-	<j:function name="DoTest4.1">
+	<j:function name="DoTestB4.1">
         <j:variables a="1.1v" b="{args.a2}" c="{context.p3}" />
-        <j:text value="4.1 {vars.a} {vars.b} {vars.c} " />
-        <j:call name="DoTest4.2" b="error" />
+        <j:text value="B4.1 {vars.a} {vars.b} {vars.c} " />
+        <j:call name="DoTestB4.1a" b="error" c="ok" />
 	</j:function>
 
-	<j:function name="DoTest4.2">
+	<j:function name="DoTestB4.1a">
         <j:variables a="1.2v" />
         <j:variable name="d" value="4v" />
-        <j:text value="4.2 {vars.a} {vars.b} {vars.c} {vars.d} " />
+        <j:text value="{vars.a} {vars.b} {vars.c} {vars.d} " />
+        <j:call name="DoTestB4.1c" />
+	</j:function>
+
+	<j:function name="DoTestB4.1c">
+        <j:text value="{args.c} " />
+	</j:function>
+
+<!-- Test C1:vars -->
+
+	<j:function name="DoTestC1.1">
+        <j:call name="DoTestC1.{context.p1}" />
 	</j:function>
 
 </j:stylesheet>

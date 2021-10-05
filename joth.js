@@ -1,3 +1,4 @@
+var jothNs = 'http://blight.co/Transform';
 
 function jothException(source, message, detail) {
 	this.source = source;
@@ -6,15 +7,19 @@ function jothException(source, message, detail) {
 }
 jothException.prototype = Object.create(Error.prototype);
 
-function _jothState(context, args, vars) {
+function __nsResolver(prefix) {
+	return jothNs;
+}
+
+function __jothState(context, args, vars) {
 	this.context = context;
 	this.args = {};
 	this.vars = {};
-	_copyKeyValues(args, this.args);
-	_copyKeyValues(vars, this.vars);
+	__copyKeyValues(args, this.args);
+	__copyKeyValues(vars, this.vars);
 }
 
-function _copyKeyValues(from, to) {
+function __copyKeyValues(from, to) {
 	var keys = Object.keys(from);
 	for (var i=0; i<keys.length; i++) {
 		var key = keys[i];
@@ -22,15 +27,15 @@ function _copyKeyValues(from, to) {
 	}
 }
 
-function _jothEval(s) {
+function __jothEval(s) {
 	var func = '"use strict";try { return (' + s + ') } catch(e) { return undefined; }';
+	console.log(s);
 	return new Function('root', 'context', 'args', 'vars', func);
 }
 
 class joth {
 	
 	constructor() {
-		this.namespace = 'http://blight.co/Transform';
 		this.xt = null;
 		this.main = null;
 		this.options = { includeComment: false, debug: 0 }
@@ -72,6 +77,7 @@ class joth {
 		var that = this;
 		if (that.options.debug > 0) console.log({ source: 'loadString', s: s });
 		that.xt = that._loadXmlString(s);
+		that._parse();
 	}
 	
 	transformUrl(url) {
@@ -127,15 +133,16 @@ class joth {
 		});
 	}
 
-	toString(e = null, nsPrefix = null) {
+	toString(e = null, nsPrefix = 'j') {
 		var ser = new XMLSerializer();
 		if (e) {
 			var s = ser.serializeToString(e);
-			if (nsPrefix)
-				return s.replace(' xmlns:'+nsPrefix+'="'+this.namespace+'"', ''); // Bit dodgy, but remove namespace
-		} else {
-			return ser.serializeToString(this.xt);
+			if (nsPrefix) {
+				return s.replace(' xmlns:'+nsPrefix+'="'+jothNs+'"', ''); // Bit dodgy, but remove namespace
+			}
+			return s;
 		}
+		return ser.serializeToString(this.xt);
 	}
 	
 	_toNodeString(e) {
@@ -146,7 +153,7 @@ class joth {
 	}
 
 	_loadXmlString(s) {
-		return new DOMParser().parseFromString(s, "text/html.xml");
+		return new DOMParser().parseFromString(s, "text/xml");
 	}
 
 	_loadXml(url) {
@@ -182,7 +189,7 @@ class joth {
 			var promises = [];
 			for (var i=children.length-1; i>=0; i--) {
 				var e = children[i];
-				if ((e.namespaceURI == that.namespace) && (e.localName == 'include')) {
+				if ((e.namespaceURI == jothNs) && (e.localName == 'include')) {
 					var url = that._attrValue(e, 'href');
 					if (!url) throw new jothException('joth._loadIncludes', 'No href property on include', that._toNodeString(e));
 					promises.push(that._loadInclude(e, url));
@@ -190,7 +197,7 @@ class joth {
 			}
 			if (that.options.debug > 0) console.log({ source: '_loadIncludes', message: 'Loading '+promises.length+' includes' });
 			Promise.all(promises).then(() => {
-				if (that.options.debug > 0) console.log({ source: '_loadIncludes', message: 'Loaded', text: that.toString() });
+				if (that.options.debug > 0) console.log({ source: '_loadIncludes', message: 'Loaded' });
 				resolve();
 			});
 		});
@@ -215,35 +222,48 @@ class joth {
 	}
 
 	_parse() {
-		return new Promise((resolve, reject) => {
-			var that = this;
-			that.functions = {};
-			that.subAttrs = [];
-			var e = that.xt.documentElement;
-			if ((e.namespaceURI !== that.namespace) || (e.localName !== 'stylesheet')) {
-				throw new jothException('joth._parse', 'Stylesheet node missing', that._toNodeString(e));
-			}
-			that._removeUnwantedNodes(e);
-			e.childNodes.forEach((child) => {
-				if (child.namespaceURI == that.namespace) {
-					if (child.localName == 'main') {
-						that.main = child;
-					} else if (child.localName === 'function') {
-						var name = child.attributes['name'];
-						if (!name) throw new jothException('joth._parse', 'No name property on function', that._toNodeString(child));
-						that.functions[name.value] = child;
-					}
+		var that = this;
+		that.functions = {};
+		that.subAttrs = [];
+		var doc = that.xt;
+		var e = doc.documentElement;
+		if ((e.namespaceURI !== jothNs) || (e.localName !== 'stylesheet')) {
+			throw new jothException('joth._parse', 'Stylesheet node missing', that._toNodeString(e));
+		}
+		that._removeUnwantedNodes(e);
+		e.childNodes.forEach((child) => {
+			if (child.namespaceURI == jothNs) {
+				if (child.localName == 'main') {
+					that.main = child;
+				} else if (child.localName === 'function') {
+					var name = child.attributes['name'];
+					if (!name) throw new jothException('joth._parse', 'No name property on function', that._toNodeString(child));
+					if (that.functions[name.value]) throw new jothException('joth._parse', 'Function "'+name.value+'" duplicated', that._toNodeString(child));
+					that.functions[name.value] = child;
 				}
-				that._parseAttrs(child);
-			});
-			if (that.options.debug >= 5) console.log({ 'source': '_parse', xt: that.xt, text: that.toString() });
-			var keys = Object.keys(that.functions);
-			if (that.options.debug > 0) console.log({ source: '_parse', message: 'Parsed '+that.subAttrs.length+' tags with {} and '+keys.length+' functions', functions: keys });
-			if (that.main == null) {
-				throw new jothException('joth._parse', 'Main node missing', that._toNodeString(e));
 			}
-			resolve();
+			that._parseAttrs(child);
 		});
+		that._parseCheckCalls(doc);
+		if (that.options.debug >= 5) console.log({ 'source': '_parse', xt: that.xt, text: that.toString() });
+		var keys = Object.keys(that.functions);
+		if (that.options.debug > 0) console.log({ source: '_parse', message: 'Parsed '+that.subAttrs.length+' tags with {} and '+keys.length+' functions', functions: keys });
+		if (that.main == null) {
+			throw new jothException('joth._parse', 'Main node missing',null);
+		}
+	}
+
+	_parseCheckCalls(doc) {
+		var that = this;
+		var nodes = doc.evaluate('//j:call', doc, __nsResolver, XPathResult.UNORDERED_NODE_ITERATOR_TYPE, null);
+		var node = nodes.iterateNext();
+		while (node) {
+			var name = node.getAttribute('name');
+			if (name && name.indexOf('{') < 0) { // Can't check now if contains {}
+				if (!that.functions[name]) throw new jothException('joth._parse', 'Function "'+name+'" does not exist', that._toNodeString(node));
+			}
+			node = nodes.iterateNext();
+		}
 	}
 	
 	_removeUnwantedNodes(e) {
@@ -278,7 +298,7 @@ class joth {
 	
 	_transform(json) {
 		var that = this;
-		that.state = new _jothState(json, {}, {});
+		that.state = new __jothState(json, {}, {});
         var result = document.createElement('div');
 		if (that.options.debug >= 5) console.log({ 'source': '_transform', json: json });
 		that.main.childNodes.forEach((e) => {
@@ -292,7 +312,7 @@ class joth {
 		if (parent == null) throw new jothException('joth._transformNode', "Did not expect parent to be null", e); 
 		var dom = parent;
 		if (e.nodeType == 1) {
-			if (e.namespaceURI == that.namespace) {
+			if (e.namespaceURI == jothNs) {
 				dom = that._transformJoth(e, state, parent, depth);
 			} else {
 				dom = document.createElement(e.tagName);
@@ -394,8 +414,8 @@ class joth {
 			handled = (len > 0);
 			for (var i=0; i<len; i++) {
 				var item = tempstate.context[i];
-				args.$info = { position: i+1, isFirst: (i==0), isLast: (i==len-1) }
-				var newstate = new _jothState(item, args, state.vars);
+				args.$info = { position: i+1, count: len, isFirst: (i==0), isLast: (i==len-1) }
+				var newstate = new __jothState(item, args, state.vars);
 				func.childNodes.forEach((child) => {
 					that._transformNode(child, newstate, parent, depth+1);
 				});
@@ -449,8 +469,8 @@ class joth {
 			handled = (len > 0);
 			for (var i=0; i<len; i++) {
 				var item = tempstate.context[i];
-				args.$info = { position: i+1, isFirst: (i==0), isLast: (i==len-1) }
-				var newstate = new _jothState(item, args, state.vars);
+				args.$info = { position: i+1, count: len, isFirst: (i==0), isLast: (i==len-1) }
+				var newstate = new __jothState(item, args, state.vars);
 				func.childNodes.forEach((child) => {
 					that._transformNode(child, newstate, parent, depth+1);
 				});
@@ -501,7 +521,7 @@ class joth {
 		var that = this;
 		var hasParens = that._attrHasParens(e, "select");
 		var value = that._attrValue(e, 'select', state, true);
-		var je = _jothEval(value);
+		var je = __jothEval(value);
 		var result = je(that.root, state.context, state.args, state.vars);
 		if (result) {
 			var dom = document.createTextNode(result);
@@ -571,7 +591,7 @@ class joth {
 			var right = repl.substring(j+1);
 			var mid = repl.substring(i+1, j);
 			try {
-				var je = _jothEval(mid);
+				var je = __jothEval(mid);
 				var result = je(that.root, state.context, state.args, state.vars);
 				if (result == undefined) result = null;
 				if (result && !isNaN(result) && (result.toString().indexOf(' ') < 0)) { // Don't treat extra spaces as a number
@@ -597,15 +617,15 @@ class joth {
 		if (that._attrExists(e, name)) {
 			var value = that._attrValue(e, name, state, true);
 			value = that._attrEval(value, state);
-			var je = _jothEval(value);
+			var je = __jothEval(value);
 			newcontext = je(that.root, state.context, state.args, state.vars);
 		}
-		return new _jothState(newcontext, {...state.args, ...that._getArgs(e)}, state.vars);
+		return new __jothState(newcontext, {...state.args, ...that._getArgs(e)}, state.vars);
 	}
 	
 	_isTrue(test, state) {
 		var that = this;
-		var je = _jothEval(test);
+		var je = __jothEval(test);
 		var result = je(that.root, state.context, state.args, state.vars);
 		if (result == null) result = false;
 		return result;
@@ -616,7 +636,7 @@ class joth {
 		var otherwise = null
 		for (var i=0; i<e.childNodes.length; i++) {
 			var child = e.childNodes[i];
-			if ((child.namespaceURI == that.namespace) && ((child.localName == 'else') || (child.localName == 'otherwise'))) {
+			if ((child.namespaceURI == jothNs) && ((child.localName == 'else') || (child.localName == 'otherwise'))) {
 				otherwise = child; // Do it this way so the last of multiple are selected like XSLT (I think?)
 			}
 		}
