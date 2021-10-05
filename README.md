@@ -1,6 +1,15 @@
 # joth
 Javascript Object To HTML
 
+## Rationale
+
+In the late 90s early 2000s, I was creating web apps using XML and client-side transformation using MS-XSL and then XSLT for IE-only. It worked well, 
+so why change it! JSON has overtaken popularity from XML, so this started as a proof-of-concept that things could be simpler than the 
+Angular/React/Vue approaches.
+
+In my view, libraries should do one small thing to help you on your way. They should not tell you how to organise your application. I've written frameworks 
+before. It was a mistake.
+
 ## Usage
 
 1. To be written
@@ -14,7 +23,7 @@ Assume "http://example.com/myJoth" returns the following XML:
 
         <j:main>
             <div>
-                <j:text select="Hello {context.name}" />
+                <j:text value="Hello {context.name}" />
             </div>
         </j:main>
 
@@ -110,17 +119,17 @@ In the descriptions below:
 
 Calls the named `j:function`. The current context will be passed, unless the call has a "select" attribute. All of the attributes
 on the node will also be passed as "args". This also means you can't have your own arguments to a function being called "name" or
-"select".
+"select". If "select" is used and it returns null, the call will not be made. Child nodes within this operation are ignored.
 
 ### j:call-foreach name="attr" [select="eval"] [ argName="attr" ...]
 
 This is the same as a `j:call` within a `j:foreach`. The context (current or "select" if available) must be an array, in which case the called function gets passed each element of the array, one at a time. If the context is not an array, or has no elements, the `j:else` 
-branch will be followed if it exists.
+branch will be followed if it exists. If "select" is used and it returns null, the call will not be made. Child nodes within this operation are ignored.
 
-### j:case
+### j:choose
 
 This is a case (or switch) statement that contains `j:when` nodes and optionally a `j:else` node. The tests on each `j:when` will be evaluated in sequence, and the first one that returns true will cause the sequence to stop. If none of the `j:when` nodes evaluate to
-true, the `j:else` branch will be followed if it exists.
+true, the `j:else/j:otherwise` branch will be followed if it exists.
 
 ### j:else
 
@@ -133,6 +142,11 @@ Used for defining functions that are called using `j:call` or `j:call-foreach`. 
     <j:function name="myFunction">
 ```
 All attributes on the call are considered to be arguments to the function, and are accessed within the funciton using "vars".
+
+### j:foreach [select="eval"] [ argName="attr" ...]
+
+The context (current or "select" if available) must be an array, in which case thechildren are processed one at a time. If the context is not an array, or has no elements, the `j:else` 
+branch will be followed if it exists. If "select" is used and it returns null, the call will not be made.
 
 ### j:if test="eval"
 
@@ -176,9 +190,9 @@ the content is first expanded, and then evaluated. For example, given a context 
     <j:value-of select="{a}+{b}" />                     - Produces "3"
 ```
 
-### j:variable name="variableName" [ select="eval" ]
+### j:variable name="variableName" [ value="attr" ]
 
-Sets one global variable based on the select attribute on the node as well as the content of the node. Also see `j:variables`.
+Sets one global variable based on the value attribute on the node as well as the content of the node. Also see `j:variables`.
 
 ### j:variables [variableName="attr" ...]
 
@@ -196,6 +210,30 @@ Anything unrecognised is ignored, including children of that node. Therefore you
 
 </details>
 
+<details><summary><h2>Context</h2></summary>
+
+As with XSLT, there is the concept of a context, which starts at the root of the JSON (which can also always be accessed as `root`). Every time
+a "select" is interpreted it changes the context. For example, with the following JSON:
+```
+    { person: { name: "Michael", address: { street: "1 Home Street", suburb: "Homely Meadows" }}}
+```
+The context will start at the top (ie. `context.person` exists). A select of "person.address" would change the context such that `context.street`
+and `context.suburb` are available.
+
+</details>
+
+<details><summary><h2>Args</h2></summary>
+
+All of the attributes on `j:call/j:call-foreach` are passed to the `j:function` as arguments (args). They can be referenced within the function as
+`args.functionName`. There is one special argument called `$info` which is provided for `j:call-foreach`, which provides the following:
+
+- `args.$info.position` is equivalent to `position()` in XSLT, and is the 1-based index into the for-each loop.
+- `args.$info.count` is the total number of items to be looped by the for-each.
+- `args.$info.isFirst` is true for the first loop item (ie. position = 1).
+- `args.$info.isLast` is true for the last loop item (ie. position = count).
+
+</details>
+
 <details><summary><h2>Parentheses</h2></summary>
 
 Attributes containing the `{}` parentheses are interpreted as Javascript, which will have access to four properties: root; context; args; and vars.
@@ -206,35 +244,43 @@ Attributes containing the `{}` parentheses are interpreted as Javascript, which 
 not change the value in the higher call.
 - vars are all the global variables set using `j:variable`.
 
-The "args" and "vars" are accessed using dot notation. For example:
+The "context", "args" and "vars" are accessed using dot notation. For example:
 ```
     <j:main>
-        <j:call name="myFunction" myProperty="1" />
+        <j:call name="myFunction" myProperty="1" select="myObject" />
     </j:main>
 
     <j:function name="myFunction">
         <j:variables v1="myVariable1" v2="myVariable2" />
+        <xsl:text value="{context.a} {args.myProperty} {vars.v1}" />
     </j:function>
 ```
-At the point when the call is made and variable is set, the code will have access to `args.myProperty`, `vars.v1`, and `vars.v2`.
-Note that the values will always be strings, so you may need to use `parseInt` if required.
+At the point when the call is made and variable is set, the code will have access to `args.myProperty`, `vars.v1`, and `vars.v2`. Similarly, 
+the "select" on the call changes the context to "myObject", so `context.a` is "myObject.a" in the JSON.
 
 Since the parentheses contain Javascript, you can include code. For example:
 ```
     <div class="mdc-card { (context.myThing=="1") ? 'my-class-1' : '' }>
 ```
-Keep in mind that everything is a string - even non-existent attributes parse as an empty string. This allows you to include code such
+Note the following:
+
+- Non-existent attributes parse as an empty string. This allows you to include code such
 as `{context.doesntExist.childProperty}` without having to worry that "doesntExist" might be undefined.
+- Parentheses cannot be nested. So instead of `{ part{index} }` you could do something like the following:
+```
+    <j:variables indexed="part{index}" />
+    <j:text value="{indexed}" />
+``` 
 </details>
 
 </details>
 
 <details><summary><h1>To Do</h1></summary>
 
-1. `j:else` is currently not built.
-2. `j:text` and `j:value-of` probably don't currently include child text.
-3. `j:foreach` probably needs to exist.
+2. Do I need `j:attributes` and/or `j:attribute`?
 4. No browser has been tested other than Chrome.
-5. No automated test cases yet.
+5. Only some semi-automated test cases so far.
+6. Could the initial parse also find errors like imbalanced or nested parentheses, duplicate function names?
+7. Do I need `j:sort`?
 
 </details>

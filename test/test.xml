@@ -8,9 +8,18 @@
         <j:call name="DoTest1.3" select="test1" test="2" />
 <!-- Test 2-->
         <j:call-foreach name="DoTest2.1" select="test2.p1" header="2.1 " />
+        <j:call-foreach name="DoTest2.2" select="test2.p2" />
+<!-- Test 3-->
+        <j:if test="test3">
+            <j:call name="DoTest3.1" />
+            <j:call name="DoTest3.2" />
+            <j:call name="DoTest3.3" />
+        </j:if>
+<!-- Test 4-->
+        <j:call name="DoTest4.1" select="test4" a1="1a" a2="2a" />
 	</j:main>
 
-<!-- Test 1-->
+<!-- Test 1: j:text and j:value-of -->
 
 	<j:function name="DoTest1.1">
 		<j:value-of select="p1" />
@@ -31,12 +40,59 @@
 		<j:value-of select="c" />
 	</j:function>
 
-<!-- Test 2-->
+<!-- Test 2: j:call-foreach -->
 
 	<j:function name="DoTest2.1">
-		<j:if test="args.info.isFirst"><j:text value="{args.header}" /></j:if>
+		<j:if test="args.$info.isFirst"><j:text value="{args.header}" /></j:if>
 		<j:value-of select="p1a" />
-		<j:if test="args.info.isLast">.</j:if>
+		<j:if test="args.$info.isLast">. </j:if>
+	</j:function>
+
+	<j:function name="DoTest2.2">
+		<j:if test="args.$info.position==1">2.2 </j:if>
+		<j:text value="{context}" /><!-- We're doing a call-foreach on an array of numbers, so context is just a number -->
+		<j:if test="args.$info.isLast"><j:text value=" " /></j:if>
+	</j:function>
+
+<!-- Test 3: j:else -->
+
+	<j:function name="DoTest3.1">
+        <j:call-foreach name="DoTest3.1error" select="test3.p1" >
+            <j:else><j:text value="3.1 " /></j:else>
+        </j:call-foreach>
+	</j:function>
+
+	<j:function name="DoTest3.1error">
+		<j:text value="DoTest3.1 Error " />
+	</j:function>
+
+	<j:function name="DoTest3.2">
+        <j:if test="DoesntExist">
+            <j:text value="3.2 Error " />
+            <j:else> <j:text value="3.2 " /></j:else>
+        </j:if>
+	</j:function>
+
+	<j:function name="DoTest3.3">
+        <j:choose>
+            <j:when test="DoesntExist1"><j:text value="3.3 Error 1 " /></j:when>
+            <j:when test="DoesntExist2"> <j:text value="3.3 Error 2 " /></j:when>
+            <j:otherwise><j:text value="3.3 " /></j:otherwise>
+        </j:choose>
+	</j:function>
+
+<!-- Test 4:vars -->
+
+	<j:function name="DoTest4.1">
+        <j:variables a="1.1v" b="{args.a2}" c="{context.p3}" />
+        <j:text value="4.1 {vars.a} {vars.b} {vars.c} " />
+        <j:call name="DoTest4.2" b="error" />
+	</j:function>
+
+	<j:function name="DoTest4.2">
+        <j:variables a="1.2v" />
+        <j:variable name="d" value="4v" />
+        <j:text value="4.2 {vars.a} {vars.b} {vars.c} {vars.d} " />
 	</j:function>
 
 </j:stylesheet>

@@ -34,6 +34,10 @@ class joth {
 		this.xt = null;
 		this.main = null;
 		this.options = { includeComment: false, debug: 0 }
+		this.timing = { 
+			load:		{ start: 0, mid: 0, end: 0, duration: 0, process: 0 }, 
+			transform:	{ start: 0, mid: 0, end: 0, duration: 0, process: 0 }
+		}
 	}
 
 	xt = null;
@@ -44,6 +48,7 @@ class joth {
 	
 	load(url) {
 		var that = this;
+		that.timing.load.start = new Date();
 		if (that.options.debug > 0) console.log({ source: 'load', url: url })
 		return new Promise((resolve, reject) => {
 			that._loadXml(url)
@@ -52,8 +57,10 @@ class joth {
 				})
 				.then(() => that._loadIncludes())
 				.then(() => {
+					that.timing.load.mid = new Date();
 					that._parse();
-					resolve()
+					that._setDuration(that.timing.load);
+					resolve();
 				})
 				.catch((e) => { 
 					reject(e);
@@ -69,14 +76,17 @@ class joth {
 	
 	transformUrl(url) {
 		var that = this;
+		that.timing.transform.start = new Date();
 		if (that.options.debug > 0) console.log({ source: 'transformUrl', url: url })
 		return new Promise((resolve, reject) => {
 			fetch(url)
 				.then((result) => result.json())
 				.then((json) => {
+					that.timing.transform.start = new Date();
 					if (that.options.debug > 0) console.log({ source: 'transformUrl', json: json })
 					that.root = json;
 					var e = that._transform(json);
+					that._setDuration(that.timing.transform);
 					resolve(e);
 				})
 				.catch((e) => { 
@@ -88,9 +98,13 @@ class joth {
 	
 	transformJSON(json) {
 		var that = this;
+		that.timing.transform.start = new Date();
+		that.timing.transform.mid = new Date();
 		if (that.options.debug > 0) console.log({ source: 'transformJSON', json: json })
 		that.root = json;
-		return that._transform(json);
+		var result = that._transform(json);
+		that._setDuration(that.timing.transform);
+		return result;
 	}
 	
 	transformUrlTo(url, dest) {
@@ -311,14 +325,18 @@ class joth {
 			dom = that._transform_call(e, state, parent, depth);
 		} else if (e.localName == 'call-foreach') {
 			dom = that._transform_call_foreach(e, state, parent, depth);
-		} else if (e.localName == 'case') {
-			dom = that._transform_case(e, state, parent, depth);
+		} else if (e.localName == 'choose') {
+			dom = that._transform_choose(e, state, parent, depth);
+		} else if (e.localName == 'foreach') {
+			dom = that._transform_foreach(e, state, parent, depth);
 		} else if (e.localName == 'if') {
 			dom = that._transform_if(e, state, parent, depth);
 		} else if (e.localName == 'text') {
 			dom = that._transform_text(e, state, parent, depth);
 		} else if (e.localName == 'value-of') {
 			dom = that._transform_value_of(e, state, parent, depth);
+		} else if (e.localName == 'variable') {
+			dom = that._transform_variable(e, state, parent, depth);
 		} else if (e.localName == 'variables') {
 			dom = that._transform_variables(e, state, parent, depth);
 		} else {
@@ -369,34 +387,81 @@ class joth {
 		var func = that.functions[name];
 		if (!func) throw new jothException('joth._transform_call_foreach', "Could not find function '"+name+"'");
 		var tempstate = that._stateForAttr(e, "select", state);
+		var handled = false;
 		if ((tempstate.context) && Array.isArray(tempstate.context)) {
 			var args = that._getArgs(e);
-			args.info = { position: 0, isFirst: false, isLast: false }
 			var len = tempstate.context.length;
+			handled = (len > 0);
 			for (var i=0; i<len; i++) {
 				var item = tempstate.context[i];
-				args.info = { position: i+1, isFirst: (i==0), isLast: (i==len-1) }
+				args.$info = { position: i+1, isFirst: (i==0), isLast: (i==len-1) }
 				var newstate = new _jothState(item, args, state.vars);
 				func.childNodes.forEach((child) => {
 					that._transformNode(child, newstate, parent, depth+1);
 				});
 			}
 		}
+		if (!handled) {
+			var otherwise = that._findElseNode(e);
+			if (otherwise) {
+				if (that.options.includeComment) that._includeComment('Else start: ', otherwise, state, parent, depth);
+				that._transformChildren(otherwise, state, parent, depth);
+				if (that.options.includeComment) that._includeComment('Else end: ', otherwise, state, parent, depth);
+			}
+		}
 		return parent;
 	}
 	
-	_transform_case(e, state, parent, depth) {
+	_transform_choose(e, state, parent, depth) {
 		var that = this;
 		var whens = e.childNodes;
+		var handled = false;
 		for (var i=0; i<whens.length; i++) {
 			var when = whens[i];
 			if (when.localName !== 'when') continue;
 			var test = that._attrValue(when, 'test', state, true);
 			if (that._isTrue(test, state)) {
+				handled = true;
 				if (that.options.includeComment) that._includeComment('When start: ', when, state, parent, depth);
 				that._transformChildren(when, state, parent, depth);
 				if (that.options.includeComment) that._includeComment('When end: ', when, state, parent, depth);
 				break;
+			}
+		}
+		if (!handled) {
+			var otherwise = that._findElseNode(e);
+			if (otherwise) {
+				if (that.options.includeComment) that._includeComment('Else start: ', otherwise, state, parent, depth);
+				that._transformChildren(otherwise, state, parent, depth);
+				if (that.options.includeComment) that._includeComment('Else end: ', otherwise, state, parent, depth);
+			}
+		}
+		return parent;
+	}
+	
+	_transform_foreach(e, state, parent, depth) {
+		var that = this;
+		var tempstate = that._stateForAttr(e, "select", state);
+		var handled = false;
+		if ((tempstate.context) && Array.isArray(tempstate.context)) {
+			var args = that._getArgs(e);
+			var len = tempstate.context.length;
+			handled = (len > 0);
+			for (var i=0; i<len; i++) {
+				var item = tempstate.context[i];
+				args.$info = { position: i+1, isFirst: (i==0), isLast: (i==len-1) }
+				var newstate = new _jothState(item, args, state.vars);
+				func.childNodes.forEach((child) => {
+					that._transformNode(child, newstate, parent, depth+1);
+				});
+			}
+		}
+		if (!handled) {
+			var otherwise = that._findElseNode(e);
+			if (otherwise) {
+				if (that.options.includeComment) that._includeComment('Else start: ', otherwise, state, parent, depth);
+				that._transformChildren(otherwise, state, parent, depth);
+				if (that.options.includeComment) that._includeComment('Else end: ', otherwise, state, parent, depth);
 			}
 		}
 		return parent;
@@ -406,9 +471,17 @@ class joth {
 		var that = this;
 		var test = that._attrValue(e, 'test', state, true);
 		var result = that._isTrue(test, state);
-		if (that.options.debug > 0) console.log({ source: '_transform_if', test: test, result: result });
+		if (that.options.debug > 0) console.log({ source: '_transform_if', test: test, result: result, state: state });
 		if (result) {
 			that._transformChildren(e, state, parent, depth);
+		} else {
+			var otherwise = that._findElseNode(e);
+			if (otherwise) {
+				if (that.options.debug > 0) console.log({ source: '_transform_if:else', test: test, result: result, state: state });
+				if (that.options.includeComment) that._includeComment('Else start: ', otherwise, state, parent, depth);
+				that._transformChildren(otherwise, state, parent, depth);
+				if (that.options.includeComment) that._includeComment('Else end: ', otherwise, state, parent, depth);
+			}
 		}
 		return parent;
 	}
@@ -441,10 +514,8 @@ class joth {
 	_transform_variable(e, state, parent, depth) {
 		var that = this;
 		var name = that._attrValue(e, 'name', state, false); 
-		var value = that._attrValue(e, 'select', state, true); 
-		var je = _jothEval(value);
-		var result = je(that.root, state.context, state.args, state.vars);
-		state.vars[name] = result;
+		var value = that._attrValue(e, 'value', state, false); 
+		state.vars[name] = value;
 		return parent;
 	}
 	
@@ -539,15 +610,33 @@ class joth {
 		if (result == null) result = false;
 		return result;
 	}
+
+	_findElseNode(e) {
+		var that = this;
+		var otherwise = null
+		for (var i=0; i<e.childNodes.length; i++) {
+			var child = e.childNodes[i];
+			if ((child.namespaceURI == that.namespace) && ((child.localName == 'else') || (child.localName == 'otherwise'))) {
+				otherwise = child; // Do it this way so the last of multiple are selected like XSLT (I think?)
+			}
+		}
+		return otherwise;
+	}
 	
 	_copyAttrs(from, to, state) {
 		var that = this;
 		if (from.attributes) {
 			for (var i=0; i<from.attributes.length; i++) {
 				var name = from.attributes[i].name;
-				var value = that._attr(from, name, state);
+				var value = that._attrValue(from, name, state);
 				if (value !== null) to.setAttribute(name, value);
 			}
 		}
+	}
+
+	_setDuration(obj) {
+		obj.end = new Date();
+		obj.duration = (obj.end.getTime() - obj.start.getTime()) / 1000;
+		obj.process = (obj.end.getTime() - obj.mid.getTime()) / 1000;
 	}
 }
