@@ -1,4 +1,3 @@
-var appServer = "http://192.168.0.18:1887/"
 var j = new joth();
 var jFail = new joth();
 
@@ -6,12 +5,14 @@ var pre = '<?xml version="1.0"?><j:stylesheet xmlns:j="http://blight.co/Transfor
 var post = '</j:stylesheet>';
 
 function pageLoaded() {
-	j.options = { debug: 0, includeComment: false }
-	j
-	.load('test.xml')
-	.then(() => {
-		startTests();
-	});
+	fetch('test.xml') // See comment below
+		.then((response) => {
+			return response.text();
+		})
+		.then((text) => {
+			j.loadString(text) // Using loadString rather than load so a web server is not required (since load expects xml content type)
+			startTests();
+		});
 }
 
 function startTests() {
