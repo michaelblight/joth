@@ -21,10 +21,10 @@ function startTests() {
 
 // Test A 
 	startTest(a, 'Test A - loads that should fail');
-	shouldFail(a, jFail, 'Test A1', '<j:function name="a" />', 'Main node missing');
-	shouldFail(a, jFail, 'Test A2', '<j:main/><j:function />', 'No name property on function');
-	shouldFail(a, jFail, 'Test A3', '<j:main/><j:function name="a" /><j:function name="a" />', 'Function "a" duplicated');
-	shouldFail(a, jFail, 'Test A4', '<j:main/><j:call name="doesntExist" />', 'Function "doesntExist" does not exist');
+	shouldFailLoad(a, jFail, 'Test A1', '<j:function name="a" />', 'Main node missing');
+	shouldFailLoad(a, jFail, 'Test A2', '<j:main/><j:function />', 'No name property on function');
+	shouldFailLoad(a, jFail, 'Test A3', '<j:main/><j:function name="a" /><j:function name="a" />', 'Function "a" duplicated');
+	shouldFailLoad(a, jFail, 'Test A4', '<j:main/><j:call name="doesntExist" />', 'Function "doesntExist" does not exist');
 
 // Test B
 	startTest(b, 'Test B - transform'+timing1(j));
@@ -38,14 +38,11 @@ function startTests() {
 	assert(b, 'Test B4'+timing2(j), testB4, 'B4.1 1.1v 2a 3p 1.2v 2a 3p 4v ok ');
 
 // Test C
-	try {
-		startTest(c, 'Test C1 - transforms that should fail'+timing1(j));
-		var testC1 = j.transformJSON({ testC1: { p1: 'DoesntExist', }});
-		assert(c, 'Test C1'+timing2(jFail), testC1, 'Should get an exception');
-	} catch(e) {
-		console.log(e)
-		assert(c, 'Test C1'+timing2(jFail), e.message, "Could not find function 'DoTestC1.DoesntExist'");
-	}
+	startTest(c, 'Test C - transforms that should fail'+timing1(j));
+	var testC1 = { testC1: {  }}
+	shouldFailTransform(c, j, 'TestC1', testC1, 'Name attribute empty, originally "{context.doesntExist}"');
+	var testC2 = { testC2: { p1: 'DoesntExist' }}
+	shouldFailTransform(c, j, 'TestC2', testC2, 'Could not find function "DoTestC2.DoesntExist", originally "DoTestC2.{context.p1}"');
 	
 }
 
@@ -79,19 +76,30 @@ function assert(parent, test, result, expected) {
 		div.style.backgroundColor = 'red';
 		div.innerText = test + ': Failed';
 		var child = document.createElement('pre');
-		child.innerText = '"' + text + '"\n"' + expected + '"';
+		child.innerText = '-->' + text + '<--\n-->' + expected + '<--';
 		div.appendChild(child);
 	}
 	parent.appendChild(div);
 }
 
-function shouldFail(parent, jFail, test, s, expected) {
+function shouldFailLoad(parent, j, name, s, expected) {
 	try {
-		jFail.loadString(pre+s+post);
-		assert(parent, test+timing1(jFail), 'Continued execution', expected);
+		j.loadString(pre+s+post);
+		assert(parent, name+timing1(j), 'Continued execution', 'Should have caused exception');
 	} catch(e) {
 		console.log(e);
-		assert(parent, test+timing1(jFail), e.message, expected);
+		assert(parent, name+timing1(j), e.message, expected);
 	}
 }
+
+function shouldFailTransform(parent, j, name, test, expected) {
+	try {
+		var result = j.transformJSON(test);
+		assert(parent, name+timing2(j), 'Continued execution', 'Should have caused exception');
+	} catch(e) {
+		console.log(e)
+		assert(parent, name+timing2(j), e.message, expected);
+	}
+}
+
 

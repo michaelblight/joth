@@ -388,9 +388,9 @@ class joth {
 	_transform_call(e, state, parent, depth) {
 		var that = this;
 		var name = that._attrValue(e, 'name', state, false);
-		if (!name) throw new jothException('joth._transform_call', "Name attribute missing", e);
+		if (!name) throw new jothException('joth._transform_call', 'Name attribute empty, originally "'+that._attr(e, 'name')+'"', e);
 		var func = that.functions[name];
-		if (!func) throw new jothException('joth._transform_call', "Could not find function '"+name+"'", e);
+		if (!func) throw new jothException('joth._transform_call', 'Could not find function "'+name+'", originally "'+that._attr(e, 'name')+'"', e);
 		var newstate = that._stateForAttr(e, "select", state);
 		if (newstate.context) {
 			func.childNodes.forEach((child) => {
@@ -562,6 +562,11 @@ class joth {
 		var a = e.attributes[name];
 		if (!a || !a.value) return false;
 		return (a.value.indexOf('{') >= 0);
+	}
+	
+	_attr(e, name) {
+		var that = this;
+		return (e.attributes[name]) ? e.attributes[name].value : null;
 	}
 	
 	_attrValue(e, name, state, shouldPrefix = false) {

@@ -20,8 +20,9 @@
 <!-- Test B4-->
         <j:call name="DoTestB4.1" select="testB4" a1="1a" a2="2a" />
 
-<!-- Test C1-->
+<!-- Test C-->
         <j:call name="DoTestC1.1" select="testC1" />
+        <j:call name="DoTestC2.1" select="testC2" />
 
 	</j:main>
 
@@ -119,7 +120,11 @@
 <!-- Test C1:vars -->
 
 	<j:function name="DoTestC1.1">
-        <j:call name="DoTestC1.{context.p1}" />
+        <j:call name="{context.doesntExist}" />
+	</j:function>
+
+	<j:function name="DoTestC2.1">
+        <j:call name="DoTestC2.{context.p1}" />
 	</j:function>
 
 </j:stylesheet>

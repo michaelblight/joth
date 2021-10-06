@@ -280,7 +280,7 @@ as `{context.doesntExist.childProperty}` without having to worry that "doesntExi
 2. Do I need `j:attributes` and/or `j:attribute`?
 4. No browser has been tested other than Chrome.
 5. Only some semi-automated test cases so far.
-6. Could the initial parse also find errors like imbalanced or nested parentheses, duplicate function names?
+6. Could the initial parse also find errors like imbalanced or nested parentheses?
 7. Do I need `j:sort`?
 
 </details>
