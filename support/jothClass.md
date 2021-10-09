@@ -14,7 +14,7 @@ debugging.
 
 <details><summary><h2>Methods</h2></summary>
 
-### load(url)
+### loadUrl(url)
 
 Returns a Promise to load joth XML from the specified URL.
 

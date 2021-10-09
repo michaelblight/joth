@@ -29,7 +29,6 @@ function __copyKeyValues(from, to) {
 
 function __jothEval(s) {
 	var func = '"use strict";try { return (' + s + ') } catch(e) { return undefined; }';
-	console.log(s);
 	return new Function('root', 'context', 'args', 'vars', func);
 }
 
@@ -38,11 +37,15 @@ class joth {
 	constructor() {
 		this.xt = null;
 		this.main = null;
-		this.options = { includeComment: false, debug: 0 }
+		this.options = { 
+			includeComment: false, 
+			debug: 0 // 2 - errors, 4 - public calls, 6 - private calls, 10 everything
+		}
 		this.timing = { 
 			load:		{ start: 0, mid: 0, end: 0, duration: 0, process: 0 }, 
 			transform:	{ start: 0, mid: 0, end: 0, duration: 0, process: 0 }
 		}
+		this.parentDOM = null; // Used by j:attribute(s) to know which DOM element to set
 	}
 
 	xt = null;
@@ -51,16 +54,17 @@ class joth {
 		return new Promise((resolve, reject) => { resolve(1); });
 	}
 	
-	load(url) {
+	loadUrl(url) {
 		var that = this;
 		that.timing.load.start = new Date();
-		if (that.options.debug > 0) console.log({ source: 'load', url: url })
+		if (that.options.debug >= 4) console.log({ source: 'loadUrl', url: url })
+
 		return new Promise((resolve, reject) => {
 			that._loadXml(url)
 				.then((xml) => {
 					that.xt = xml;
+					return that._loadIncludes();
 				})
-				.then(() => that._loadIncludes())
 				.then(() => {
 					that.timing.load.mid = new Date();
 					that._parse();
@@ -68,6 +72,7 @@ class joth {
 					resolve();
 				})
 				.catch((e) => { 
+					if (that.options.debug >= 2) console.log({ source: 'loadUrl', message: "Error loading from '"+url+"'", exception: e });
 					reject(e);
 				});
 		});
@@ -75,7 +80,7 @@ class joth {
 	
 	loadString(s) {
 		var that = this;
-		if (that.options.debug > 0) console.log({ source: 'loadString', s: s });
+		if (that.options.debug >= 4) console.log({ source: 'loadString', s: s });
 		that.xt = that._loadXmlString(s);
 		that._parse();
 	}
@@ -83,20 +88,20 @@ class joth {
 	transformUrl(url) {
 		var that = this;
 		that.timing.transform.start = new Date();
-		if (that.options.debug > 0) console.log({ source: 'transformUrl', url: url })
+		if (that.options.debug >= 4) console.log({ source: 'transformUrl', url: url })
 		return new Promise((resolve, reject) => {
-			fetch(url)
+			fetch(url, {cache: "no-cache"})
 				.then((result) => result.json())
 				.then((json) => {
-					that.timing.transform.start = new Date();
-					if (that.options.debug > 0) console.log({ source: 'transformUrl', json: json })
+					that.timing.transform.mid = new Date();
+					if (that.options.debug >= 4) console.log({ source: 'transformUrl', json: json })
 					that.root = json;
 					var e = that._transform(json);
 					that._setDuration(that.timing.transform);
 					resolve(e);
 				})
 				.catch((e) => { 
-					if (that.options.debug > 0) console.log({ source: 'transformUrl', exception: e })
+					if (that.options.debug >= 2) console.log({ source: 'transformUrl', exception: e })
 					reject(e);
 				});
 		});
@@ -106,7 +111,7 @@ class joth {
 		var that = this;
 		that.timing.transform.start = new Date();
 		that.timing.transform.mid = new Date();
-		if (that.options.debug > 0) console.log({ source: 'transformJSON', json: json })
+		if (that.options.debug >= 4) console.log({ source: 'transformJSON', json: json })
 		that.root = json;
 		var result = that._transform(json);
 		that._setDuration(that.timing.transform);
@@ -115,7 +120,7 @@ class joth {
 	
 	transformUrlTo(url, dest) {
 		var that = this;
-		if (that.options.debug > 0) console.log({ source: 'transformUrlTo', url: url })
+		if (that.options.debug >= 4) console.log({ source: 'transformUrlTo', url: url })
 		return new Promise((resolve, reject) => {
             that.transformUrl(url)
                 .then((e) => {
@@ -128,6 +133,7 @@ class joth {
                     resolve();
                 })
 				.catch((e) => { 
+					if (that.options.debug >= 2) console.log({ source: 'transformUrlTo', message: "Error transforming from '"+url+"'", exception: e });
 					reject(e);
 				});
 		});
@@ -159,48 +165,48 @@ class joth {
 	_loadXml(url) {
 		var that = this;
 		return new Promise((resolve, reject) => {
-			var xhr = new XMLHttpRequest();
-			xhr.onreadystatechange = function() {
-				if (this.readyState == 4) {
-					if (this.status == 200) {
-						if (that.options.debug >= 5) console.log({ 'source': '_loadXml', xml: this.responseXML, text: this.responseText });
-						if (this.responseXML) {
-							resolve(this.responseXML);
-						} else {
-							reject(this);
-						}
-					} else {
-						reject();
-					}
-				}
-			};
-			xhr.open("GET", url, true);
-			xhr.setRequestHeader("Cache-Control", "no-cache");
-			xhr.setRequestHeader("Pragma", "no-cache");
-			xhr.send();
-		});
+			if (that.options.debug >= 6) console.log({ source: '_loadXml', message: 'Loading from "'+url+'"' })
+			fetch(url, {cache: "no-cache"})
+        		.then((response) => {
+					return response.text()
+				})
+        		.then((text) => {
+					var result = new window.DOMParser().parseFromString(text, "text/xml");
+					const errorNode = result.querySelector('parsererror');
+					if (errorNode) reject(new jothException('_loadXml', 'Error loading "'+url+'"', errorNode.innerText));
+					return result;
+				})
+				.then((xml) => {
+					resolve(xml);
+				})
+				.catch((e) => {
+					if (that.options.debug >= 2) console.log({ source: '_loadXml', message: 'Error loading "'+url+'"', exception: e });
+					reject(e);
+				})
+		})
 	}
+
 	
 	_loadIncludes() {
 		var that = this;
-		return new Promise((resolve, reject) => {
-			var that = this;
-			var children = that.xt.documentElement.childNodes;
+		if (that.options.debug >= 6) console.log({ source: '_loadIncludes', message: 'Started' });
+		try {
+			var doc = that.xt.documentElement;
+			var nodes = that.xt.evaluate('/j:stylesheet/j:include', doc, __nsResolver, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
 			var promises = [];
-			for (var i=children.length-1; i>=0; i--) {
-				var e = children[i];
-				if ((e.namespaceURI == jothNs) && (e.localName == 'include')) {
-					var url = that._attrValue(e, 'href');
-					if (!url) throw new jothException('joth._loadIncludes', 'No href property on include', that._toNodeString(e));
-					promises.push(that._loadInclude(e, url));
-				}
+			if (that.options.debug >= 6) console.log({ source: '_loadIncludes', message: 'Loading '+nodes.snapshotLength+' includes' });
+			for (var i=nodes.snapshotLength-1; i>=0; i--) {
+				var e = nodes.snapshotItem(i);
+				var url = that._attrValue(e, 'href');
+				if (!url) throw new jothException('joth._loadIncludes', 'No href property on include', that._toNodeString(e));
+				promises.push(that._loadInclude(e, url));
 			}
-			if (that.options.debug > 0) console.log({ source: '_loadIncludes', message: 'Loading '+promises.length+' includes' });
-			Promise.all(promises).then(() => {
-				if (that.options.debug > 0) console.log({ source: '_loadIncludes', message: 'Loaded' });
-				resolve();
-			});
-		});
+		} catch(e) {
+			if (that.options.debug >= 2) console.log({ source: '_loadIncludes', message: 'Error in load', exception: e });
+			throw new jothException('joth._loadIncludes', e.message);
+		}
+		if (that.options.debug >= 6) console.log({ source: '_loadIncludes', message: 'Promises returned' });
+		return Promise.all(promises);
 	}
 	
 	_loadInclude(e, url) {
@@ -208,7 +214,7 @@ class joth {
 		return new Promise((resolve, reject) => {
 			that._loadXml(url)
 				.then((xml) => {
-					if (that.options.debug > 0) console.log({ source: '_loadInclude', message: "Loaded from '"+url+"'", text: that.toString(xml.documentElement) });
+					if (that.options.debug >= 6) console.log({ source: '_loadInclude', message: "Loaded from '"+url+"'", text: that.toString(xml.documentElement) });
 					var parent = e.parentNode;
 					var doc = xml.documentElement;
 					while (doc.firstChild) parent.insertBefore(doc.firstChild, e);
@@ -216,6 +222,7 @@ class joth {
 					resolve();
 				})
 				.catch((e) => { 
+					if (that.options.debug >= 2) console.log({ source: '_loadInclude', message: "Error loading from '"+url+"'", exception: e });
 					reject(e);
 				});
 		});
@@ -227,6 +234,7 @@ class joth {
 		that.subAttrs = [];
 		var doc = that.xt;
 		var e = doc.documentElement;
+		if (that.options.debug >= 6) console.log({ source: '_parse', message: 'Parse started', xt: that.xt, text: that.toString() });
 		if ((e.namespaceURI !== jothNs) || (e.localName !== 'stylesheet')) {
 			throw new jothException('joth._parse', 'Stylesheet node missing', that._toNodeString(e));
 		}
@@ -244,13 +252,12 @@ class joth {
 			}
 			that._parseAttrs(child);
 		});
+
+		if (that.main == null) throw new jothException('joth._parse', 'Main node missing');
 		that._parseCheckCalls(doc);
-		if (that.options.debug >= 5) console.log({ 'source': '_parse', xt: that.xt, text: that.toString() });
+		if (that.options.debug >= 6) console.log({ source: '_parse', xt: that.xt, text: that.toString() });
 		var keys = Object.keys(that.functions);
-		if (that.options.debug > 0) console.log({ source: '_parse', message: 'Parsed '+that.subAttrs.length+' tags with {} and '+keys.length+' functions', functions: keys });
-		if (that.main == null) {
-			throw new jothException('joth._parse', 'Main node missing',null);
-		}
+		if (that.options.debug>= 6) console.log({ source: '_parse', message: 'Parsed '+that.subAttrs.length+' tags with {} and '+keys.length+' functions', functions: keys });
 	}
 
 	_parseCheckCalls(doc) {
@@ -260,7 +267,7 @@ class joth {
 		while (node) {
 			var name = node.getAttribute('name');
 			if (name && name.indexOf('{') < 0) { // Can't check now if contains {}
-				if (!that.functions[name]) throw new jothException('joth._parse', 'Function "'+name+'" does not exist', that._toNodeString(node));
+				if (!that.functions[name]) throw new jothException('joth._parseCheckCalls', 'Function "'+name+'" does not exist', that._toNodeString(node));
 			}
 			node = nodes.iterateNext();
 		}
@@ -300,7 +307,7 @@ class joth {
 		var that = this;
 		that.state = new __jothState(json, {}, {});
         var result = document.createElement('div');
-		if (that.options.debug >= 5) console.log({ 'source': '_transform', json: json });
+		if (that.options.debug >= 6) console.log({ 'source': '_transform', json: json });
 		that.main.childNodes.forEach((e) => {
 			that._transformNode(e, that.state, result, 0);
 		});
@@ -316,6 +323,7 @@ class joth {
 				dom = that._transformJoth(e, state, parent, depth);
 			} else {
 				dom = document.createElement(e.tagName);
+				that.parentDOM = dom;
 				that._copyAttrs(e, dom, state);
 				if (that.options.debug >= 10) console.log({ 'source': '_transformNode', node: that.toString(dom) });
 				parent.appendChild(dom);
@@ -341,7 +349,11 @@ class joth {
 		var that = this;
 		var dom = parent;
 		if (that.options.includeComment) that._includeComment('Start: ', e, state, parent, depth)
-		if (e.localName == 'call') {
+		if (e.localName == 'attribute') {
+			dom = that._transform_attribute(e, state, parent, depth);
+		} else if (e.localName == 'attributes') {
+			dom = that._transform_attributes(e, state, parent, depth);
+		} else if (e.localName == 'call') {
 			dom = that._transform_call(e, state, parent, depth);
 		} else if (e.localName == 'call-foreach') {
 			dom = that._transform_call_foreach(e, state, parent, depth);
@@ -385,6 +397,26 @@ class joth {
 		parent.appendChild(nl);
 	}
 	
+	_transform_attribute(e, state, parent, depth) {
+		var that = this;
+		if (!that.parentDOM) throw new jothException('joth._transform_attribute', 'No parent DOM node found for j:attribute with name="'+that._attr(e, 'name')+'"', e);
+		var name = that._attrValue(e, 'name', state, false);
+		if (!name) throw new jothException('joth._transform_attribute', 'Name attribute empty, originally "'+that._attr(e, 'name')+'"', e);
+		var value = that._attrValue(e, 'value', state, false);
+		// Got content of optional value, now get content of children
+		var temp = that.xt.createElement('div');
+		that._transformChildren(e, state, temp, depth);
+		that.parentDOM.setAttribute(name, (value ? value : '')+temp.textContent);
+		return parent;
+	}
+	
+	_transform_attributes(e, state, parent, depth) {
+		var that = this;
+		if (!that.parentDOM) throw new jothException('joth._transform_attribute', 'No parent DOM node found for j:attribute with name="'+that._attr(e, 'name')+'"', e);
+		that._copyAttrs(e, that.parentDOM, state);
+		return parent;
+	}
+	
 	_transform_call(e, state, parent, depth) {
 		var that = this;
 		var name = that._attrValue(e, 'name', state, false);
@@ -409,12 +441,13 @@ class joth {
 		var tempstate = that._stateForAttr(e, "select", state);
 		var handled = false;
 		if ((tempstate.context) && Array.isArray(tempstate.context)) {
-			var args = that._getArgs(e);
+			var args = that._getArgs(e, state);
 			var len = tempstate.context.length;
 			handled = (len > 0);
 			for (var i=0; i<len; i++) {
 				var item = tempstate.context[i];
 				args.$info = { position: i+1, count: len, isFirst: (i==0), isLast: (i==len-1) }
+				console.log(args);
 				var newstate = new __jothState(item, args, state.vars);
 				func.childNodes.forEach((child) => {
 					that._transformNode(child, newstate, parent, depth+1);
@@ -464,7 +497,7 @@ class joth {
 		var tempstate = that._stateForAttr(e, "select", state);
 		var handled = false;
 		if ((tempstate.context) && Array.isArray(tempstate.context)) {
-			var args = that._getArgs(e);
+			var args = that._getArgs(e, state);
 			var len = tempstate.context.length;
 			handled = (len > 0);
 			for (var i=0; i<len; i++) {
@@ -491,13 +524,13 @@ class joth {
 		var that = this;
 		var test = that._attrValue(e, 'test', state, true);
 		var result = that._isTrue(test, state);
-		if (that.options.debug > 0) console.log({ source: '_transform_if', test: test, result: result, state: state });
+		if (that.options.debug >= 6) console.log({ source: '_transform_if', test: test, result: result, state: state });
 		if (result) {
 			that._transformChildren(e, state, parent, depth);
 		} else {
 			var otherwise = that._findElseNode(e);
 			if (otherwise) {
-				if (that.options.debug > 0) console.log({ source: '_transform_if:else', test: test, result: result, state: state });
+				if (that.options.debug >= 6) console.log({ source: '_transform_if:else', test: test, result: result, state: state });
 				if (that.options.includeComment) that._includeComment('Else start: ', otherwise, state, parent, depth);
 				that._transformChildren(otherwise, state, parent, depth);
 				if (that.options.includeComment) that._includeComment('Else end: ', otherwise, state, parent, depth);
@@ -541,15 +574,18 @@ class joth {
 	
 	_transform_variables(e, state, parent, depth) {
 		var that = this;
-		state.vars = {...state.vars, ...that._getArgs(e)}
+		state.vars = {...state.vars, ...that._getArgs(e, state)}
 		return parent;
 	}
 	
-	_getArgs(e) {
+	_getArgs(e, state) {
+		var that = this;
 		var args = {};
 		for (var i=0; i<e.attributes.length; i++) {
 			var a = e.attributes[i];
-			args[a.name] = a.value;
+			var name = a.name;
+			var value = that._attrValue(e, name, state);
+			if (value !== null) args[name] = value;
 		}
 		return args;
 	}
@@ -571,6 +607,7 @@ class joth {
 	
 	_attrValue(e, name, state, shouldPrefix = false) {
 		var that = this;
+		if (!e) throw new jothException('joth._attrValue','Cannot get property "'+name+'" from null');
 		var value = (e.attributes[name]) ? e.attributes[name].value : null;
 		var before = value;
 		var result = value;
@@ -625,13 +662,15 @@ class joth {
 			var je = __jothEval(value);
 			newcontext = je(that.root, state.context, state.args, state.vars);
 		}
-		return new __jothState(newcontext, {...state.args, ...that._getArgs(e)}, state.vars);
+		return new __jothState(newcontext, {...state.args, ...that._getArgs(e, state)}, state.vars);
 	}
 	
 	_isTrue(test, state) {
 		var that = this;
 		var je = __jothEval(test);
 		var result = je(that.root, state.context, state.args, state.vars);
+		var truefalse = false;
+		if (result) truefalse = true;
 		if (result == null) result = false;
 		return result;
 	}

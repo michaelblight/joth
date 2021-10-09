@@ -3,24 +3,33 @@
 
 	<j:main>
 
-<!-- Test B1-->
+<!-- Test A - loads that should cause exceptions -->
+
+<!-- Test B - transforms that should run ok -->
+
+<!-- Test B1: j:text and j:value-of -->
         <j:call name="DoTestB1.1" select="testB1" />
         <j:if test="testB1"><j:call name="DoTestB1.2" /></j:if>
         <j:call name="DoTestB1.3" select="testB1" test="2" />
-<!-- Test B2-->
+<!-- Test B2: j:call and j:call-foreach -->
         <j:call-foreach name="DoTestB2.1" select="testB2.p1" header="B2.1 " />
         <j:call-foreach name="DoTestB2.2" select="testB2.p2" />
         <j:call name="DoTestB2.3" select="testB2" />
-<!-- Test B3-->
+<!-- Test B3: j:else-->
         <j:if test="testB3">
             <j:call name="DoTestB3.1" />
             <j:call name="DoTestB3.2" />
             <j:call name="DoTestB3.3" />
         </j:if>
-<!-- Test B4-->
+<!-- Test B4: vars -->
         <j:call name="DoTestB4.1" select="testB4" a1="1a" a2="2a" />
+<!-- Test B5: j:attribute and j:attributes -->
+        <j:call name="DoTestB5.1" select="testB5" />
+        <j:call name="DoTestB5.2" select="testB5" />
+        <j:call name="DoTestB5.3" select="testB5" />
+        <j:call name="DoTestB5.4" select="testB5" p2="a2" />
 
-<!-- Test C-->
+<!-- Test C - transforms that should cause exceptions -->
         <j:call name="DoTestC1.1" select="testC1" />
         <j:call name="DoTestC2.1" select="testC2" />
 
@@ -115,6 +124,32 @@
 
 	<j:function name="DoTestB4.1c">
         <j:text value="{args.c} " />
+	</j:function>
+
+<!-- Test B5: j:attribute and j:attributes -->
+
+	<j:function name="DoTestB5.1">
+		<div id="B5.1">
+			<j:attribute name="a" value="a1" />
+		</div>
+	</j:function>
+
+	<j:function name="DoTestB5.2">
+		<div id="B5.1">
+			<j:attribute name="a"><j:text value="a2"/></j:attribute>
+		</div>
+	</j:function>
+
+	<j:function name="DoTestB5.3">
+		<div id="B5.1">
+			<j:attribute name="a" value="a" ><j:text value="3"/></j:attribute>
+		</div>
+	</j:function>
+
+	<j:function name="DoTestB5.4">
+		<div id="B5.1">
+			<j:attributes a1="a1" a2="{args.p2}" />
+		</div>
 	</j:function>
 
 <!-- Test C1:vars -->

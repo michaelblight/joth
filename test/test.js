@@ -5,12 +5,8 @@ var pre = '<?xml version="1.0"?><j:stylesheet xmlns:j="http://blight.co/Transfor
 var post = '</j:stylesheet>';
 
 function pageLoaded() {
-	fetch('test.xml') // See comment below
-		.then((response) => {
-			return response.text();
-		})
-		.then((text) => {
-			j.loadString(text) // Using loadString rather than load so a web server is not required (since load expects xml content type)
+	j.loadUrl('test.xml')
+		.then(() => {
 			startTests();
 		});
 }
@@ -21,14 +17,14 @@ function startTests() {
 	var c = document.getElementById('TestC');
 
 // Test A 
-	startTest(a, 'Test A - loads that should fail');
+	startTest(a, 'Test A - loads that should cause exceptions');
 	shouldFailLoad(a, jFail, 'Test A1', '<j:function name="a" />', 'Main node missing');
 	shouldFailLoad(a, jFail, 'Test A2', '<j:main/><j:function />', 'No name property on function');
 	shouldFailLoad(a, jFail, 'Test A3', '<j:main/><j:function name="a" /><j:function name="a" />', 'Function "a" duplicated');
 	shouldFailLoad(a, jFail, 'Test A4', '<j:main/><j:call name="doesntExist" />', 'Function "doesntExist" does not exist');
 
 // Test B
-	startTest(b, 'Test B - transform'+timing1(j));
+	startTest(b, 'Test B - transforms that should run ok'+timing1(j));
 	var testB1 = j.transformJSON({ testB1: { p1: 'B1.1 ', p2: 'B1.2 ', p3: 'B1.3 ', a: 1, b: 2, c: 3, field1: "John", field2: "Mary" }});
 	assert(b, 'Test B1'+timing2(j), testB1, 'B1.1 B1.2 B1.3  a John 1+2=3 33');
 	var testB2 = j.transformJSON({ testB2: { p1: [ { p1a: "a" }, { p1a: "b" } ], p2: [1, 2, 3] } });
@@ -37,13 +33,15 @@ function startTests() {
 	assert(b, 'Test B3'+timing2(j), testB3, 'B3.1 B3.2 B3.3 ');
 	var testB4 = j.transformJSON({ testB4: { p1: "1p", p2: "2p", p3: "3p" } });
 	assert(b, 'Test B4'+timing2(j), testB4, 'B4.1 1.1v 2a 3p 1.2v 2a 3p 4v ok ');
+	var testB5 = j.transformJSON({ testB5: { p1: "1p", p2: "2p", p3: "3p" } });
+	assert(b, 'Test B5'+timing2(j), testB5, '<div id="B5.1" a="a1"></div><div id="B5.1" a="a2"></div><div id="B5.1" a="a3"></div><div id="B5.1" a1="a1" a2="a2"></div>');
 
 // Test C
-	startTest(c, 'Test C - transforms that should fail'+timing1(j));
+	startTest(c, 'Test C - transforms that should cause exceptions'+timing1(j));
 	var testC1 = { testC1: {  }}
-	shouldFailTransform(c, j, 'TestC1', testC1, 'Name attribute empty, originally "{context.doesntExist}"');
+	shouldFailTransform(c, j, 'Test C1', testC1, 'Name attribute empty, originally "{context.doesntExist}"');
 	var testC2 = { testC2: { p1: 'DoesntExist' }}
-	shouldFailTransform(c, j, 'TestC2', testC2, 'Could not find function "DoTestC2.DoesntExist", originally "DoTestC2.{context.p1}"');
+	shouldFailTransform(c, j, 'Test C2', testC2, 'Could not find function "DoTestC2.DoesntExist", originally "DoTestC2.{context.p1}"');
 	
 }
 

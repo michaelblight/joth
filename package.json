@@ -1,6 +1,6 @@
 {
     "name": "joth",
-    "version": "1.4.1",
+    "version": "1.4.2",
     "description": "Javascript Object To HTML",
     "main": "joth.js",
     "scripts": {
